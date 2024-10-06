@@ -1,0 +1,45 @@
+[package]
+name = "rush"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.22"
+regex = "1.11.0"
+thiserror = "1.0.64"
+
+[dev-dependencies]
+rand = "0.8.5"
+
+# General lints "inherent" in Rustlang.
+[workspace.lints.rust]
+# We require docs on all items
+missing_docs = "deny"
+# We require a debug implementation on all items
+missing_debug_implementations = "deny"
+
+# Lint target for code documentation. When running `rustdoc`,
+# show an error when using broken links.
+[lints.rustdoc]
+all = "deny"
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "allow"
+
+# Lint target for Clippy ("A collection of lints to catch common
+# mistakes and improve your Rust code.", ref:
+# https://doc.rust-lang.org/nightly/clippy/)
+[lints.clippy]
+# Clippy lint target one. Enables all lints that are on by
+# default (correctness, suspicious, style, complexity, perf).
+all = "deny"
+# Clippy lint target two. Enables lints which are rather strict
+# or have occasional false positives.
+nursery = "deny"
+# Clippy lint target three. Enables new lints that are still
+# under development
+pedantic = "deny"
+# Clippy lint target four. Enable lints for the cargo manifest
+# file, a.k.a. Cargo.toml.
+cargo = "deny"
+# Individual lints go here now:
+missing_docs_in_private_items = "deny"

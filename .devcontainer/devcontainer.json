@@ -1,0 +1,75 @@
+// general::ref: https://code.visualstudio.com/docs/devcontainers/containers
+// creation::ref: https://code.visualstudio.com/docs/devcontainers/create-dev-container
+// json_schema::ref: https://containers.dev/implementors/json_schema/
+// variables::ref:
+//   https://github.com/microsoft/vscode-remote-release/issues/2697#issuecomment-609854675
+//   https://containers.dev/implementors/json_reference/#variables-in-devcontainerjson
+{
+  "name": "rush",
+  "image": "ghcr.io/georglauterbach/dev-container-base:2.1.0",
+  "features": {
+    "ghcr.io/georglauterbach/dev-container-features/rust:1.0.0": {
+      "install-mold": "true"
+    }
+  },
+  "updateRemoteUserUID": true,
+  "remoteUser": "ubuntu",
+  "containerUser": "ubuntu",
+  "containerEnv": {
+    "CARGO_TARGET_DIR": "${containerWorkspaceFolder}/target/target",
+    "CARGO_HOME": "${containerWorkspaceFolder}/target/cargo_home",
+    "RUSTUP_HOME": "${containerWorkspaceFolder}/target/rustup_home",
+    "HERMES_LOAD_WRAPPER": "true",
+    "WORKSPACE_DIR_CONTAINER": "${containerWorkspaceFolder}",
+    "WORKSPACE_DIR_HOST": "${localWorkspaceFolder}"
+  },
+  // The repository root directory is mounted to `${containerWorkspaceFolder}`
+  // implicitly (by the dev-container spec), and we want to navigate there and
+  // then into the code sub-directory to immediately download the correct components
+  // (that Cargo detects from the workspace setup in this directory).
+  "postStartCommand": {
+    "rustup --version": "rustup --version",
+    "cargo --version && rustc --version": "cargo --version ; rustc --version ;",
+    "mold --version": "mold --version",
+    "miscellaneous": "bash .devcontainer/scripts/post_start_command.sh"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "asciidoctor.asciidoctor-vscode",
+        "streetsidesoftware.code-spell-checker@4.0.13"
+      ],
+      "settings": {
+        // ? files
+        "files.insertFinalNewline": true,
+        "files.trimTrailingWhitespace": true,
+        "files.exclude": {
+          "**/.git": true
+        },
+        "files.watcherExclude": {
+          "**/.git/objects/": true,
+          "code/target": true,
+          "target/": true
+        },
+        // ? extensions
+        // * extensions::
+        "asciidoc.antora.enableAntoraSupport": false,
+        // * extensions::docsView
+        "docsView.documentationView.updateMode": "sticky",
+        // * extensions::cSpell
+        "cSpell.diagnosticLevel": "Information",
+        "cSpell.language": "en,de",
+        "cSpell.words": [
+          "rustc",
+          "rustup",
+          "devcontainer",
+          "thiserror"
+        ],
+        // * extensions::rust-analyzer
+        "rust-analyzer.diagnostics.experimental.enable": true,
+        "rust-analyzer.imports.preferNoStd": true,
+        "rust-analyzer.imports.preferPrelude": true
+      }
+    }
+  }
+}

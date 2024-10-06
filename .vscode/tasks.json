@@ -1,0 +1,86 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build: Default",
+      "detail": "Build rush in debug mode",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "type": "cargo",
+      "command": "build",
+      "args": [
+        "--all"
+      ],
+      "problemMatcher": "$rustc",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "icon": {
+        "color": "terminal.ansiBlue",
+        "id": "circuit-board"
+      }
+    },
+    {
+      "label": "Build: Release",
+      "detail": "Build rush in release mode",
+      "group": {
+        "kind": "build",
+      },
+      "type": "cargo",
+      "command": "build",
+      "args": [
+        "--all",
+        "--release"
+      ],
+      "problemMatcher": "$rustc",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "icon": {
+        "color": "terminal.ansiBlue",
+        "id": "circuit-board"
+      }
+    },
+    {
+      "label": "Build: Documentation",
+      "detail": "Build the documentation and print its link",
+      "group": {
+        "kind": "build"
+      },
+      "type": "cargo",
+      "command": "doc",
+      "args": [
+        "--all-features",
+        "--document-private-items",
+        "--lib",
+        "--keep-going",
+        "--target-dir=${env:WORKSPACE_DIR_HOST}/target/target"
+      ],
+      "problemMatcher": "$rustc",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "icon": {
+        "color": "terminal.ansiBlue",
+        "id": "circuit-board"
+      }
+    }
+  ]
+}
