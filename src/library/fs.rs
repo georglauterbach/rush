@@ -75,7 +75,17 @@ impl std::fmt::Display for ObjectType {
 }
 
 impl From<&std::path::PathBuf> for ObjectType {
-    fn from(value: &std::path::PathBuf) -> Self { unimplemented!() }
+    fn from(path: &std::path::PathBuf) -> Self {
+        if path.is_file() {
+            Self::File
+        } else if path.is_dir() {
+            Self::Directory
+        } else if path.is_symlink() {
+            Self::SymbolicLink
+        } else {
+            Self::Unknown
+        }
+    }
 }
 
 /// A common trait that all filesystem objects implement. It provides method to create,
@@ -89,7 +99,8 @@ pub trait Object: Sized + std::fmt::Display {
     fn new(path: impl AsRef<std::path::Path>) -> Self;
 
     /// Retrieve the path on the filesystem that this object refers to.
-    fn path(&self) -> impl AsRef<std::path::Path>;
+    fn path(&self) -> &std::path::PathBuf;
+    fn path_mut(&mut self) -> &mut std::path::PathBuf;
 
     /// Check whether the object already exists on the file system. If the object
     /// exists, a type check determines whether the path actually points to the
@@ -104,9 +115,6 @@ pub trait Object: Sized + std::fmt::Display {
 
     /// Delete the object from the filesystem.
     fn delete_from_fs(&self) -> FSResult<()>;
-    /// Delete the object from the filesystem and all directories that are a parent of
-    /// of this object.
-    fn delete_from_fs_recursive(&self) -> FSResult<()>;
 
     /// Move the object to a new location.
     fn move_to(self, target: impl AsRef<std::path::Path>) -> FSResult<Self>;
@@ -153,7 +161,9 @@ impl Object for File {
         Self { path: path_buf }
     }
 
-    fn path(&self) -> impl AsRef<std::path::Path> { self.path.clone() }
+    fn path(&self) -> &std::path::PathBuf { &self.path }
+
+    fn path_mut(&mut self) -> &mut std::path::PathBuf { &mut self.path }
 
     fn exists(&self) -> FSResult<bool> {
         if self.path.exists() {
@@ -180,35 +190,20 @@ impl Object for File {
 
     fn create_on_fs_recursive(&self) -> FSResult<()> {
         log::trace!("Recursively creating file with path {}", self);
-        std::fs::create_dir_all(&self.path.parent().unwrap_or(std::path::Path::new("/")))?;
+        if let Some(path) = self.path.parent() {
+            std::fs::create_dir_all(path)?;
+        }
         self.create_on_fs()
     }
 
     fn delete_from_fs(&self) -> FSResult<()> {
         log::trace!("Deleting file {}", self);
-        if !self.path.exists() {
+        if !self.exists()? {
             log::trace!("File {} did not exist in the first place", self);
             return Ok(());
         }
-        if !self.path.is_file() {
-            log::trace!("Path {} does not describe a file - not deleting", self);
-            return Err(FSError::TypeMismatch(Self::OBJECT_TYPE));
-        }
 
         std::fs::remove_file(&self.path)?;
-        Ok(())
-    }
-
-    fn delete_from_fs_recursive(&self) -> FSResult<()> {
-        log::trace!("Recursively deleting parents of file {}", self);
-        if let Err(error) = std::fs::remove_file(&self.path) {
-          if error.kind() != std::io::ErrorKind::NotFound {
-            return Err(error.into());
-          }
-        }
-        // if let Some(path) = self.path.parent() {
-        //   if let Err(error) = std::fs::remove_dir_all(path)
-        // }
         Ok(())
     }
 
@@ -316,59 +311,91 @@ mod file_test {
     }
 
     #[test]
-    fn create_exists_delete() {
+    fn create_exists_delete() -> FSResult<()> {
         let test_path = generate_test_path();
         let file = File::new(&test_path);
-        assert_eq!(file.path().as_ref(), test_path);
-        assert!(!file.exists().unwrap());
-        assert!(!file.path().as_ref().exists());
+        assert_eq!(*file.path(), test_path);
+        assert!(!file.exists()?);
+        assert!(!file.path().exists());
 
         file.create_on_fs()
             .expect("Creating a file should be possible");
-        assert!(file.exists().unwrap());
-        assert!(file.path().as_ref().exists());
+        assert!(file.exists()?);
+        assert!(file.path().exists());
 
         file.delete_from_fs().expect("Deleting should be possible");
-        assert!(!file.exists().unwrap());
+        assert!(!file.exists()?);
+
+        Ok(())
     }
 
     #[test]
-    fn create_exists_delete_recursive() {
+    fn create_exists_delete_recursive() -> FSResult<()> {
         // We require initial setup to properly work with relative paths here, and to clean
         // them up afterward.
         std::env::set_current_dir("/tmp")
             .expect("Could not change current working directory to '/tmp'");
 
-        let dir1 = Directory::new("many");
-        let dir2 = Directory::new("many/parent");
-        let dir3 = Directory::new("many/parent/dirs");
-        let file = File::new("many/parent/dirs/file");
-        file.delete_from_fs_recursive()
-            .expect("No errors should be observed when preparing recursive file tests");
-        assert!(!dir1.exists().unwrap());
-        assert!(!dir2.exists().unwrap());
-        assert!(!dir3.exists().unwrap());
-        assert!(!file.exists().unwrap());
+        Directory::new("many")
+            .delete_from_fs()
+            .expect("Directory 'many' should not exist or be deletable");
+        assert!(!Directory::new("many").exists()?);
 
-        assert_eq!(Err(FSError::NonExistent), file.create_on_fs());
+        let file = File::new("many/parent/dirs/file.txt");
         file.create_on_fs_recursive()
             .expect("Creating a file recursively should be possible");
-        assert!(file.exists().unwrap());
+        assert!(file.exists()?);
 
-        file.delete_from_fs_recursive()
-            .expect("Deleting a file recursively should be possible");
-        assert!(!dir1.exists().unwrap());
-        assert!(!dir2.exists().unwrap());
-        assert!(!dir3.exists().unwrap());
-        assert!(!file.exists().unwrap());
+        file.delete_from_fs()?;
+        assert!(!file.exists()?);
+
+        Directory::new("many").delete_from_fs()?;
+
+        Ok(())
     }
 
     #[test]
-    fn file_write() {
+    fn move_to() -> FSResult<()> {
+        let test_path_source = generate_test_path();
+        let file = File::new(&test_path_source);
+        file.create_on_fs()?;
+        assert!(file.exists()?);
+        let target = file.move_to(generate_test_path())?;
+        assert!(!std::fs::exists(test_path_source)?);
+        assert!(target.exists()?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn copy_to() -> FSResult<()> {
+        let test_path_source = generate_test_path();
+        let file = File::new(&test_path_source);
+        file.create_on_fs()?;
+        assert!(file.exists()?);
+        let target = file.copy_to(generate_test_path())?;
+        assert!(file.exists()?);
+        assert!(target.exists()?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn write() -> FSResult<()> {
         let file = File::new(generate_test_path());
         const MESSAGE: &str = "This is a very fine message!";
-        file.write_new(MESSAGE).expect("File should be writable");
+        file.write_new(MESSAGE)?;
         assert_eq!(file.size(), MESSAGE.len() as u64);
+
+        let file = File::new(generate_test_path());
+        file.create_on_fs()?;
+        assert!(file.exists_and_is_empty()?);
+
+        let file = File::new(generate_test_path());
+        file.write_new("Haha")?;
+        assert!(!file.exists_and_is_empty()?);
+
+        Ok(())
     }
 }
 
@@ -392,7 +419,9 @@ impl Object for Directory {
         Self { path: path_buf }
     }
 
-    fn path(&self) -> impl AsRef<std::path::Path> { self.path.clone() }
+    fn path(&self) -> &std::path::PathBuf { &self.path }
+
+    fn path_mut(&mut self) -> &mut std::path::PathBuf { &mut self.path }
 
     fn exists(&self) -> FSResult<bool> {
         if self.path.exists() {
@@ -421,13 +450,9 @@ impl Object for Directory {
 
     fn delete_from_fs(&self) -> FSResult<()> {
         log::trace!("Deleting directory {}", self);
-        std::fs::remove_dir(&self.path)?;
-        Ok(())
-    }
-
-    fn delete_from_fs_recursive(&self) -> FSResult<()> {
-        log::trace!("Recursively deleting directory {}", self);
-        std::fs::remove_dir_all(&self.path)?;
+        if self.exists()? {
+            std::fs::remove_dir_all(&self.path)?;
+        }
         Ok(())
     }
 
@@ -468,7 +493,7 @@ impl Object for Directory {
         if let Ok(mut entry) = self.path.read_dir() {
             Ok(entry.next().is_none())
         } else {
-          Ok(false)
+            Ok(false)
         }
     }
 }
